@@ -1,18 +1,27 @@
-
-import React, { useState } from 'react';
-import { KanbanStage, KanbanTask } from '../types';
+import React, { useState, useEffect } from 'react';
+import { KanbanStage, KanbanTask, KanbanCard } from '../types';
 import { KANBAN_STAGES_ORDER } from '../constants';
 import KanbanColumn from './KanbanColumn';
 import { useAppContext } from '../contexts/AppContext';
 import { PlusIcon } from './icons/MiniIcons';
 import Modal from './Modal';
 import { useNavigate } from 'react-router-dom';
+import { loadTasks, saveTasks, loadCards, addCard, removeCard } from '../services/localStorageService';
 
 const KanbanBoard: React.FC = () => {
   const { tasks, addTask, selectedChannel } = useAppContext();
   const [showAddIdeaModal, setShowAddIdeaModal] = useState(false);
   const [newIdeaTitle, setNewIdeaTitle] = useState('');
   const navigate = useNavigate();
+  const [cards, setCards] = useState<KanbanCard[]>([]);
+
+  useEffect(() => {
+    setCards(loadCards());
+  }, []);
+
+  useEffect(() => {
+    saveTasks(tasks);
+  }, [tasks]);
 
   const handleAddIdea = () => {
     if (newIdeaTitle.trim()) {
@@ -27,7 +36,23 @@ const KanbanBoard: React.FC = () => {
       setNewIdeaTitle('');
       setShowAddIdeaModal(false);
       navigate(`/planning/${newTask.id}`); // Navigate to planning page for the new idea
+      setCards(loadCards());
     }
+  };
+
+  const handleAddCard = () => {
+    const newCard: KanbanCard = {
+      id: Date.now().toString(),
+      title: '새 카드',
+      description: '설명',
+    };
+    addCard(newCard);
+    setCards(loadCards());
+  };
+
+  const handleRemoveCard = (id: string) => {
+    removeCard(id);
+    setCards(loadCards());
   };
 
   return (
@@ -78,6 +103,15 @@ const KanbanBoard: React.FC = () => {
           </div>
         </Modal>
       )}
+      <button onClick={handleAddCard}>카드 추가</button>
+      <ul>
+        {cards.map(card => (
+          <li key={card.id}>
+            <strong>{card.title}</strong> - {card.description}
+            <button onClick={() => handleRemoveCard(card.id)}>삭제</button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 };

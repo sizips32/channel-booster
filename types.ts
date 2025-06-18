@@ -48,3 +48,10 @@ export interface GoogleSearchGroundingChunk {
   };
   // Other types of chunks can exist, but we are interested in web for URLs
 }
+
+// KanbanBoard의 카드(간단 메모 등)에 사용되는 타입
+export interface KanbanCard {
+  id: string;
+  title: string;
+  description: string;
+}
