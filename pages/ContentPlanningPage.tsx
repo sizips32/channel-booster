@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../contexts/AppContext';
@@ -9,15 +8,15 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import { SparklesIcon, ArrowPathIcon } from '../components/icons/MiniIcons';
 
 const ContentPlanningPage: React.FC = () => {
-  const { 
-    selectedChannel, 
-    addTask, 
-    updateTask, 
-    getTaskById, 
-    isLoading, 
-    setIsLoading, 
-    error, 
-    setError, 
+  const {
+    selectedChannel,
+    addTask,
+    updateTask,
+    getTaskById,
+    isLoading,
+    setIsLoading,
+    error,
+    setError,
     moveTask,
     apiKeyStatus
   } = useAppContext();
@@ -39,7 +38,8 @@ const ContentPlanningPage: React.FC = () => {
   });
   const [useGoogleSearch, setUseGoogleSearch] = useState(false);
   const [groundingChunks, setGroundingChunks] = useState<GoogleSearchGroundingChunk[]>([]);
-
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [saveMessage, setSaveMessage] = useState<string>('');
 
   useEffect(() => {
     if (taskId) {
@@ -72,7 +72,6 @@ const ContentPlanningPage: React.FC = () => {
     }
   }, [taskId, getTaskById, selectedChannel, navigate, setError]);
 
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setCurrentTask(prev => ({ ...prev, [name]: value }));
@@ -80,8 +79,8 @@ const ContentPlanningPage: React.FC = () => {
 
   const generateMasterPrompt = useCallback(() => {
     if (!currentTask.title) {
-        setError("핵심 주제를 입력해주세요.");
-        return;
+      setError("핵심 주제를 입력해주세요.");
+      return;
     }
     const prompt = MASTER_PROMPT_TEMPLATE
       .replace('{channelTheme}', currentTask.channelTheme || selectedChannel.defaultTheme)
@@ -104,8 +103,8 @@ const ContentPlanningPage: React.FC = () => {
       return;
     }
     if (apiKeyStatus !== "API 키가 환경변수에 설정됨") {
-        setError("API 키가 설정되지 않았습니다. 스크립트를 생성할 수 없습니다.");
-        return;
+      setError("API 키가 설정되지 않았습니다. 스크립트를 생성할 수 없습니다.");
+      return;
     }
 
     setIsLoading(true);
@@ -114,13 +113,13 @@ const ContentPlanningPage: React.FC = () => {
 
     try {
       const { text, groundingMetadata } = await geminiService.generateContent(
-        currentTask.generatedMasterPrompt, 
-        currentTask.selectedModel, 
+        currentTask.generatedMasterPrompt,
+        currentTask.selectedModel,
         useGoogleSearch
       );
       setCurrentTask(prev => ({ ...prev, generatedScript: text }));
       if (useGoogleSearch && groundingMetadata?.groundingChunks) {
-         setGroundingChunks(groundingMetadata.groundingChunks as GoogleSearchGroundingChunk[]);
+        setGroundingChunks(groundingMetadata.groundingChunks as GoogleSearchGroundingChunk[]);
       }
     } catch (err: any) {
       setError(`스크립트 생성 오류: ${err.message}`);
@@ -130,31 +129,41 @@ const ContentPlanningPage: React.FC = () => {
     }
   };
 
-  const handleSaveTask = () => {
+  const handleSaveTask = async () => {
     if (!currentTask.title?.trim()) {
-        setError("핵심 주제(제목)는 필수입니다.");
-        return;
+      setError("핵심 주제(제목)는 필수입니다.");
+      return;
     }
-    const taskToSave: KanbanTask = {
-      id: taskId || `task-${Date.now()}`,
-      stage: currentTask.stage || KanbanStage.PLANNING,
-      channelId: selectedChannel.id,
-      selectedModel: currentTask.selectedModel || selectedChannel.preferredModel || AVAILABLE_TEXT_MODELS[0],
-      ...currentTask,
-      title: currentTask.title.trim(),
-    };
-
-    if (taskId) {
-      updateTask(taskToSave);
-    } else {
-      addTask(taskToSave);
+    setSaveStatus('saving');
+    setSaveMessage('');
+    try {
+      const taskToSave: KanbanTask = {
+        id: taskId || `task-${Date.now()}`,
+        stage: currentTask.stage || KanbanStage.PLANNING,
+        channelId: selectedChannel.id,
+        selectedModel: currentTask.selectedModel || selectedChannel.preferredModel || AVAILABLE_TEXT_MODELS[0],
+        ...currentTask,
+        title: currentTask.title.trim(),
+      };
+      if (taskId) {
+        await updateTask(taskToSave);
+      } else {
+        await addTask(taskToSave);
+      }
+      if (taskToSave.generatedScript && taskToSave.stage === KanbanStage.PLANNING) {
+        await moveTask(taskToSave.id, KanbanStage.SCRIPTING);
+      }
+      setSaveStatus('success');
+      setSaveMessage('변경사항이 저장되었습니다!');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1200); // 1.2초 후 이동
+    } catch (e) {
+      setSaveStatus('error');
+      setSaveMessage('저장 중 오류가 발생했습니다. 다시 시도해 주세요.');
     }
-    if(taskToSave.generatedScript && taskToSave.stage === KanbanStage.PLANNING){
-        moveTask(taskToSave.id, KanbanStage.SCRIPTING);
-    }
-    navigate(`/dashboard`);
   };
-  
+
   const formSectionStyle = "bg-white p-6 rounded-lg shadow mb-6";
   const labelStyle = "block text-sm font-medium text-slate-700 mb-1";
   const inputBaseStyle = "w-full p-2 border border-slate-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 text-slate-800 placeholder-slate-500"; // Updated placeholder color
@@ -163,16 +172,16 @@ const ContentPlanningPage: React.FC = () => {
   const selectStyle = `${inputBaseStyle} bg-white`;
 
 
-  if (taskId && !getTaskById(taskId) && !isLoading && !error) { 
-      // If there's an error already (like "Task not found"), don't overwrite it.
-      setError("선택한 작업을 찾을 수 없습니다. 대시보드로 돌아가세요.");
-      return <div className="p-4 text-red-500">선택한 작업을 찾을 수 없습니다. 대시보드로 돌아가세요.</div>;
+  if (taskId && !getTaskById(taskId) && !isLoading && !error) {
+    // If there's an error already (like "Task not found"), don't overwrite it.
+    setError("선택한 작업을 찾을 수 없습니다. 대시보드로 돌아가세요.");
+    return <div className="p-4 text-red-500">선택한 작업을 찾을 수 없습니다. 대시보드로 돌아가세요.</div>;
   }
-  
+
   return (
     <div className="container mx-auto max-w-4xl">
       <h2 className="text-3xl font-bold text-slate-800 mb-6">{taskId ? '콘텐츠 기획 수정' : '새 콘텐츠 기획'}</h2>
-      
+
       {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">{error}</div>}
 
       <div className={formSectionStyle}>
@@ -184,15 +193,15 @@ const ContentPlanningPage: React.FC = () => {
           </div>
           <div>
             <label htmlFor="channelTheme" className={labelStyle}>채널 주제 (페르소나)</label>
-            <input type="text" name="channelTheme" id="channelTheme" value={currentTask.channelTheme || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 20년 경력의 금융 애널리스트"/>
+            <input type="text" name="channelTheme" id="channelTheme" value={currentTask.channelTheme || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 20년 경력의 금융 애널리스트" />
           </div>
           <div>
             <label htmlFor="targetAudience" className={labelStyle}>타겟 시청자</label>
-            <input type="text" name="targetAudience" id="targetAudience" value={currentTask.targetAudience || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 3040 직장인 투자자"/>
+            <input type="text" name="targetAudience" id="targetAudience" value={currentTask.targetAudience || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 3040 직장인 투자자" />
           </div>
-           <div>
+          <div>
             <label htmlFor="toneAndManner" className={labelStyle}>스타일 및 톤</label>
-            <input type="text" name="toneAndManner" id="toneAndManner" value={currentTask.toneAndManner || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 권위 있지만 친절하게"/>
+            <input type="text" name="toneAndManner" id="toneAndManner" value={currentTask.toneAndManner || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 권위 있지만 친절하게" />
           </div>
         </div>
       </div>
@@ -200,7 +209,7 @@ const ContentPlanningPage: React.FC = () => {
       <div className={formSectionStyle}>
         <h3 className="text-xl font-semibold text-slate-700 mb-4">2. 후킹 설계</h3>
         <div className="space-y-4">
-           <div>
+          <div>
             <label htmlFor="hookOpeningMentions" className={labelStyle}>오프닝 후킹 멘트</label>
             <textarea name="hookOpeningMentions" id="hookOpeningMentions" value={currentTask.hookOpeningMentions || ''} onChange={handleInputChange} className={textareaStyle} placeholder="예: 여러분이 아는 액면분할은 착각입니다." />
           </div>
@@ -214,96 +223,96 @@ const ContentPlanningPage: React.FC = () => {
           </div>
           <div>
             <label htmlFor="nextVideoTeaser" className={labelStyle}>다음 영상 주제 예고</label>
-            <input type="text" name="nextVideoTeaser" id="nextVideoTeaser" value={currentTask.nextVideoTeaser || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 테슬라의 다음 혁신 기술"/>
+            <input type="text" name="nextVideoTeaser" id="nextVideoTeaser" value={currentTask.nextVideoTeaser || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 테슬라의 다음 혁신 기술" />
           </div>
         </div>
       </div>
-      
+
       <div className={formSectionStyle}>
-          <h3 className="text-xl font-semibold text-slate-700 mb-4">참고: 분석 데이터 (시뮬레이션)</h3>
-          <div className="space-y-3 p-3 bg-indigo-50 rounded-md">
-              <h4 className="font-medium text-indigo-700">키워드 트렌드 (예: "{currentTask.title || '엔비디아'}")</h4>
-              <p className="text-sm text-slate-600">최근 '{currentTask.title || '엔비디아'}' 관련 검색량 및 관심도가 급증하는 추세입니다. 특히 '액면분할', '실적 발표'와 같은 이벤트와 연관된 검색이 많습니다.</p>
-              <h4 className="font-medium text-indigo-700 mt-2">경쟁 채널 벤치마킹 (예: "{currentTask.title || '엔비디아'}")</h4>
-              <p className="text-sm text-slate-600">상위 노출 영상들은 다음과 같은 특징을 보입니다:</p>
-              <ul className="list-disc list-inside text-sm text-slate-600 pl-4">
-                  <li>긴급성, 극단적 표현 사용 (예: "속보", "절대 사지 마세요")</li>
-                  <li>시청자에게 질문을 던지는 제목 (예: "...해도 될까?")</li>
-                  <li>붉은색/파란색 화살표, 유튜버의 표정을 활용한 썸네일</li>
-                  <li>통념을 깨는 도입부로 시작하는 스크립트 구조</li>
-              </ul>
-          </div>
+        <h3 className="text-xl font-semibold text-slate-700 mb-4">참고: 분석 데이터 (시뮬레이션)</h3>
+        <div className="space-y-3 p-3 bg-indigo-50 rounded-md">
+          <h4 className="font-medium text-indigo-700">키워드 트렌드 (예: "{currentTask.title || '엔비디아'}")</h4>
+          <p className="text-sm text-slate-600">최근 '{currentTask.title || '엔비디아'}' 관련 검색량 및 관심도가 급증하는 추세입니다. 특히 '액면분할', '실적 발표'와 같은 이벤트와 연관된 검색이 많습니다.</p>
+          <h4 className="font-medium text-indigo-700 mt-2">경쟁 채널 벤치마킹 (예: "{currentTask.title || '엔비디아'}")</h4>
+          <p className="text-sm text-slate-600">상위 노출 영상들은 다음과 같은 특징을 보입니다:</p>
+          <ul className="list-disc list-inside text-sm text-slate-600 pl-4">
+            <li>긴급성, 극단적 표현 사용 (예: "속보", "절대 사지 마세요")</li>
+            <li>시청자에게 질문을 던지는 제목 (예: "...해도 될까?")</li>
+            <li>붉은색/파란색 화살표, 유튜버의 표정을 활용한 썸네일</li>
+            <li>통념을 깨는 도입부로 시작하는 스크립트 구조</li>
+          </ul>
+        </div>
       </div>
 
       <div className={formSectionStyle}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold text-slate-700">3. 마스터 프롬프트 생성</h3>
-          <button 
-            onClick={generateMasterPrompt} 
+          <button
+            onClick={generateMasterPrompt}
             className="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center transition duration-150"
             disabled={isLoading}
           >
-            <ArrowPathIcon className="w-5 h-5 mr-2"/>
+            <ArrowPathIcon className="w-5 h-5 mr-2" />
             프롬프트 생성/업데이트
           </button>
         </div>
-        <textarea 
-          name="generatedMasterPrompt" 
-          value={currentTask.generatedMasterPrompt || ''} 
-          readOnly 
-          className={`${textareaStyle} bg-slate-50 min-h-[200px]`} 
+        <textarea
+          name="generatedMasterPrompt"
+          value={currentTask.generatedMasterPrompt || ''}
+          readOnly
+          className={`${textareaStyle} bg-slate-50 min-h-[200px]`}
           placeholder="이곳에 생성된 마스터 프롬프트가 표시됩니다."
         />
       </div>
 
       <div className={formSectionStyle}>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-3 sm:space-y-0">
-            <h3 className="text-xl font-semibold text-slate-700">4. AI 스크립트 생성</h3>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-                <div className="w-full sm:w-auto">
-                  <label htmlFor="selectedModel" className={`${labelStyle} sm:hidden`}>AI 모델 선택</label>
-                  <select 
-                      name="selectedModel" 
-                      id="selectedModel" 
-                      value={currentTask.selectedModel || ''} 
-                      onChange={handleInputChange}
-                      className={`${selectStyle} sm:min-w-[250px]`}
-                  >
-                      {AVAILABLE_TEXT_MODELS.map(model => (
-                          <option key={model} value={model}>{model}</option>
-                      ))}
-                  </select>
-                </div>
-                <label htmlFor="useGoogleSearch" className="flex items-center space-x-2 text-sm text-slate-600 cursor-pointer pt-2 sm:pt-0">
-                    <input 
-                        type="checkbox" 
-                        id="useGoogleSearch" 
-                        checked={useGoogleSearch} 
-                        onChange={(e) => setUseGoogleSearch(e.target.checked)}
-                        className="form-checkbox h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
-                    />
-                    <span>Google 검색 활용 (최신 정보)</span>
-                </label>
+          <h3 className="text-xl font-semibold text-slate-700">4. AI 스크립트 생성</h3>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
+            <div className="w-full sm:w-auto">
+              <label htmlFor="selectedModel" className={`${labelStyle} sm:hidden`}>AI 모델 선택</label>
+              <select
+                name="selectedModel"
+                id="selectedModel"
+                value={currentTask.selectedModel || ''}
+                onChange={handleInputChange}
+                className={`${selectStyle} sm:min-w-[250px]`}
+              >
+                {AVAILABLE_TEXT_MODELS.map(model => (
+                  <option key={model} value={model}>{model}</option>
+                ))}
+              </select>
             </div>
+            <label htmlFor="useGoogleSearch" className="flex items-center space-x-2 text-sm text-slate-600 cursor-pointer pt-2 sm:pt-0">
+              <input
+                type="checkbox"
+                id="useGoogleSearch"
+                checked={useGoogleSearch}
+                onChange={(e) => setUseGoogleSearch(e.target.checked)}
+                className="form-checkbox h-4 w-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+              />
+              <span>Google 검색 활용 (최신 정보)</span>
+            </label>
+          </div>
         </div>
-         <div className="flex justify-end">
-            <button 
-                onClick={handleGenerateScript} 
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition duration-150"
-                disabled={isLoading || !currentTask.generatedMasterPrompt || apiKeyStatus !== "API 키가 환경변수에 설정됨" || !currentTask.selectedModel}
-            >
-                <SparklesIcon className="w-5 h-5 mr-2"/>
-                스크립트 생성 실행
-            </button>
+        <div className="flex justify-end">
+          <button
+            onClick={handleGenerateScript}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition duration-150"
+            disabled={isLoading || !currentTask.generatedMasterPrompt || apiKeyStatus !== "API 키가 환경변수에 설정됨" || !currentTask.selectedModel}
+          >
+            <SparklesIcon className="w-5 h-5 mr-2" />
+            스크립트 생성 실행
+          </button>
         </div>
         {apiKeyStatus !== "API 키가 환경변수에 설정됨" && (
-            <p className="text-sm text-red-500 my-2">주의: API 키가 설정되지 않아 스크립트 생성이 비활성화되었습니다.</p>
+          <p className="text-sm text-red-500 my-2">주의: API 키가 설정되지 않아 스크립트 생성이 비활성화되었습니다.</p>
         )}
-        {isLoading && <div className="my-4"><LoadingSpinner text="AI가 스크립트를 생성 중입니다..."/></div>}
-        <textarea 
-          name="generatedScript" 
-          value={currentTask.generatedScript || ''} 
-          onChange={handleInputChange} 
+        {isLoading && <div className="my-4"><LoadingSpinner text="AI가 스크립트를 생성 중입니다..." /></div>}
+        <textarea
+          name="generatedScript"
+          value={currentTask.generatedScript || ''}
+          onChange={handleInputChange}
           className={`${textareaStyle} bg-slate-50 min-h-[300px] mt-4`}
           placeholder="이곳에 AI가 생성한 스크립트 초안이 표시됩니다. 직접 수정할 수 있습니다."
         />
@@ -325,12 +334,24 @@ const ContentPlanningPage: React.FC = () => {
         )}
       </div>
 
-      <div className="mt-8 mb-8 flex justify-end">
-        <button 
-          onClick={handleSaveTask} 
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-150"
-          disabled={isLoading}
+      <div className="mt-8 mb-8 flex flex-col items-end space-y-2">
+        {saveStatus === 'success' && (
+          <div className="text-green-600 font-semibold mb-2">{saveMessage}</div>
+        )}
+        {saveStatus === 'error' && (
+          <div className="text-red-600 font-semibold mb-2">{saveMessage}</div>
+        )}
+        <button
+          onClick={handleSaveTask}
+          className={`bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg text-lg transition duration-150 flex items-center ${saveStatus === 'saving' ? 'opacity-60 cursor-not-allowed' : ''}`}
+          disabled={isLoading || saveStatus === 'saving'}
         >
+          {saveStatus === 'saving' && (
+            <svg className="animate-spin h-5 w-5 mr-2 text-white" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+            </svg>
+          )}
           {taskId ? '변경사항 저장' : '기획 완료 및 저장'}
         </button>
       </div>
