@@ -30,6 +30,8 @@ export interface KanbanTask {
   generatedScript?: string;
   // (Simulated) Production Data
   videoClips?: { paragraph: string; clipIdea: string }[];
+  // 영상 길이(분) 옵션 (예: 1, 3, 5, 10, 20, 30, 60)
+  videoDuration?: number;
 }
 
 export interface Channel {

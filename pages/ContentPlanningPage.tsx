@@ -7,6 +7,8 @@ import { geminiService } from '../services/geminiService';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { SparklesIcon, ArrowPathIcon } from '../components/icons/MiniIcons';
 
+const VIDEO_DURATION_OPTIONS = [1, 3, 5, 10, 20, 30, 60];
+
 const ContentPlanningPage: React.FC = () => {
   const {
     selectedChannel,
@@ -35,6 +37,7 @@ const ContentPlanningPage: React.FC = () => {
     nextVideoTeaser: '',
     generatedMasterPrompt: '',
     generatedScript: '',
+    videoDuration: 5, // 기본값 5분
   });
   const [useGoogleSearch, setUseGoogleSearch] = useState(false);
   const [groundingChunks, setGroundingChunks] = useState<GoogleSearchGroundingChunk[]>([]);
@@ -74,7 +77,10 @@ const ContentPlanningPage: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setCurrentTask(prev => ({ ...prev, [name]: value }));
+    setCurrentTask(prev => ({
+      ...prev,
+      [name]: name === 'videoDuration' ? Number(value) : value
+    }));
   };
 
   const generateMasterPrompt = useCallback(() => {
@@ -82,7 +88,10 @@ const ContentPlanningPage: React.FC = () => {
       setError("핵심 주제를 입력해주세요.");
       return;
     }
-    const prompt = MASTER_PROMPT_TEMPLATE
+    const durationText = currentTask.videoDuration
+      ? `이 스크립트는 ${currentTask.videoDuration}분 분량의 영상에 맞게 작성해 주세요. `
+      : '';
+    const prompt = durationText + MASTER_PROMPT_TEMPLATE
       .replace('{channelTheme}', currentTask.channelTheme || selectedChannel.defaultTheme)
       .replace('{targetAudience}', currentTask.targetAudience || selectedChannel.defaultAudience)
       .replace('{coreTopic}', currentTask.title || '미정')
@@ -202,6 +211,20 @@ const ContentPlanningPage: React.FC = () => {
           <div>
             <label htmlFor="toneAndManner" className={labelStyle}>스타일 및 톤</label>
             <input type="text" name="toneAndManner" id="toneAndManner" value={currentTask.toneAndManner || ''} onChange={handleInputChange} className={inputStyle} placeholder="예: 권위 있지만 친절하게" />
+          </div>
+          <div>
+            <label htmlFor="videoDuration" className={labelStyle}>영상 길이(분)</label>
+            <select
+              name="videoDuration"
+              id="videoDuration"
+              value={currentTask.videoDuration}
+              onChange={handleInputChange}
+              className={selectStyle}
+            >
+              {VIDEO_DURATION_OPTIONS.map(min => (
+                <option key={min} value={min}>{min}분</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
